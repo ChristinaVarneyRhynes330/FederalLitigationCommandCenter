@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import tailwindcss from '@tailwindcss/vite'; // <--- Added import
+import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
 export default defineConfig({
     plugins: [
         react(),
-        tailwindcss(), // <--- Added plugin here
+        tailwindcss(),
     ],
     resolve: {
         extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
@@ -54,7 +54,7 @@ export default defineConfig({
     },
     build: {
         target: 'esnext',
-        outDir: 'build',
+        outDir: 'dist', // <--- Changed from 'build' to 'dist'
     },
     server: {
         port: 3000,
