@@ -1,0 +1,39 @@
+# Optional: GitHub Actions workflow for Vercel
+# This is handled automatically by Vercel's GitHub integration
+# This file is just for reference and can be deleted
+
+name: Vercel Deployment
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+
+      - name: Deploy to Vercel
+        run: echo "Deployment handled by Vercel GitHub integration"
+
+# Note: This workflow is optional. Vercel's GitHub integration
+# automatically deploys on every push to main without needing
+# GitHub Actions. Delete this file if you prefer Vercel-only deployment.
