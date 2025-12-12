@@ -21,6 +21,15 @@ export default function Finance() {
 
     async function fetchExpenses() {
         setLoading(true);
+        if (!supabase) {
+            setExpenses([
+                { id: '1', date: '2024-12-01', category: 'Filing Fees', description: 'District Court Filing', amount: 402, status: 'paid' },
+                { id: '2', date: '2024-12-05', category: 'Expert Witness', description: 'Dr. Smith Consultation', amount: 5000, status: 'paid' },
+                { id: '3', date: '2024-12-10', category: 'Deposition', description: 'Court Reporter Services', amount: 850, status: 'pending' }
+            ]);
+            setLoading(false);
+            return;
+        }
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
             const { data } = await supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false });
@@ -30,6 +39,11 @@ export default function Finance() {
     }
 
     async function handleAddExpense() {
+        if (!supabase) {
+            alert('Demo mode: Expense would be saved here');
+            setShowForm(false);
+            return;
+        }
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         await supabase.from('expenses').insert([{ ...newExpense, user_id: user.id, amount: Number(newExpense.amount) }]);

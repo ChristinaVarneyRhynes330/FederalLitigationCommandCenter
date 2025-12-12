@@ -17,6 +17,15 @@ export default function Binder() {
     useEffect(() => {
         async function fetchBinder() {
             try {
+                if (!supabase) {
+                    setEvidence([
+                        { id: '1', batesNumber: 'EX-001', title: 'Contract Agreement', type: 'PDF', created_at: '12/10/2024' },
+                        { id: '2', batesNumber: 'EX-002', title: 'Email Chain - March', type: 'PDF', created_at: '12/10/2024' },
+                        { id: '3', batesNumber: 'EX-003', title: 'Financial Records Q3', type: 'Excel', created_at: '12/09/2024' }
+                    ]);
+                    setLoading(false);
+                    return;
+                }
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
                     const { data } = await supabase

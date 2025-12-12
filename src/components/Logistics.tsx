@@ -10,6 +10,18 @@ export default function Logistics() {
     useEffect(() => {
         async function fetchData() {
             setLoading(true);
+            if (!supabase) {
+                setLogs([
+                    { id: 1, topic: "Discovery Extension Request", date: "2024-12-05", notes: "Agreed to 30-day extension" },
+                    { id: 2, topic: "Deposition Schedule", date: "2024-12-08", notes: "Scheduled for Jan 15-20" }
+                ]);
+                setDiscovery([
+                    { id: 1, title: "Expert Disclosure", due_date: "2024-12-20", status: "pending" },
+                    { id: 2, title: "Interrogatory Responses", due_date: "2024-12-28", status: "pending" }
+                ]);
+                setLoading(false);
+                return;
+            }
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const logsRes = await supabase.from('conferral_logs').select('*').eq('user_id', user.id);

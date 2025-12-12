@@ -30,6 +30,16 @@ export default function People() {
     async function fetchPeople() {
         try {
             setLoading(true);
+            if (!supabase) {
+                setPeople([
+                    { id: '1', name: 'Hon. Sarah Johnson', type: 'judge', role: 'District Judge', email: 'chambers@district.court', phone: '555-0100', organization: 'U.S. District Court' },
+                    { id: '2', name: 'Michael Chen', type: 'opposing', role: 'Lead Counsel', email: 'mchen@opposingfirm.com', phone: '555-0200', organization: 'Smith & Associates' },
+                    { id: '3', name: 'Dr. Emily Williams', type: 'expert', role: 'Medical Expert', email: 'ewilliams@medexperts.com', phone: '555-0300', status: 'Retained' },
+                    { id: '4', name: 'Jane Doe', type: 'witness', role: 'Fact Witness', email: 'jdoe@email.com', phone: '555-0400', status: 'Contacted' }
+                ]);
+                setLoading(false);
+                return;
+            }
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data, error } = await supabase
@@ -50,6 +60,12 @@ export default function People() {
 
     async function handleAddPerson() {
         try {
+            if (!supabase) {
+                alert('Demo mode: Contact would be saved here');
+                setShowAddForm(false);
+                setNewPerson({ type: 'witness' });
+                return;
+            }
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 

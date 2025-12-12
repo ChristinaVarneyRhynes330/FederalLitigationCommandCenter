@@ -8,6 +8,16 @@ export default function DiscoveryManager() {
 
     useEffect(() => {
         async function fetch() {
+            if (!supabase) {
+                setFiles([
+                    { id: 1, name: "Interrogatories - Set 1", category: "Discovery" },
+                    { id: 2, name: "Requests for Production", category: "Discovery" },
+                    { id: 3, name: "Expert Report - Dr. Smith", category: "Expert" },
+                    { id: 4, name: "Deposition Transcript - Jane Doe", category: "Deposition" }
+                ]);
+                setLoading(false);
+                return;
+            }
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data } = await supabase.from('documents').select('*').order('created_at', {ascending: false});

@@ -9,7 +9,11 @@ export default function HearingMode({ onExit }: { onExit: () => void }) {
     const [liveObjection, setLiveObjection] = useState<string | null>(null);
     const [script, setScript] = useState('');
     const [title, setTitle] = useState('');
+    const [notes, setNotes] = useState('');
+    const [noteId, setNoteId] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
     const recognitionRef = useRef<any>(null);
+    const autosaveTimerRef = useRef<any>(null);
 
     useEffect(() => {
         // Setup Speech Recognition
@@ -54,7 +58,75 @@ export default function HearingMode({ onExit }: { onExit: () => void }) {
         } catch (e) { console.error(e); }
     };
 
+    // Autosave notes to database
+    const autoSaveNotes = async (content: string) => {
+        if (!supabase || !content.trim()) return;
+
+        try {
+            setSaving(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            if (noteId) {
+                // Update existing note
+                const { error } = await supabase
+                    .from('notes')
+                    .update({ content, updated_at: new Date().toISOString() })
+                    .eq('id', noteId);
+                if (error) console.error('Error updating note:', error);
+            } else {
+                // Create new note
+                const { data, error } = await supabase
+                    .from('notes')
+                    .insert([{
+                        user_id: user.id,
+                        title: title || 'Hearing Notes',
+                        content,
+                        type: 'hearing'
+                    }])
+                    .select()
+                    .single();
+
+                if (error) {
+                    console.error('Error creating note:', error);
+                } else if (data) {
+                    setNoteId(data.id);
+                }
+            }
+        } catch (error) {
+            console.error('Autosave error:', error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Trigger autosave when notes change
+    useEffect(() => {
+        if (autosaveTimerRef.current) {
+            clearTimeout(autosaveTimerRef.current);
+        }
+
+        autosaveTimerRef.current = setTimeout(() => {
+            if (notes.trim()) {
+                autoSaveNotes(notes);
+            }
+        }, 2000); // Save 2 seconds after user stops typing
+
+        return () => {
+            if (autosaveTimerRef.current) {
+                clearTimeout(autosaveTimerRef.current);
+            }
+        };
+    }, [notes]);
+
     const saveScript = async () => {
+        // Mock save if Supabase is not configured
+        if (!supabase) {
+            alert('Script saved to local storage (demo mode)');
+            localStorage.setItem('hearing_script_' + Date.now(), JSON.stringify({ title, script, transcript }));
+            return;
+        }
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { error } = await supabase.from('hearing_scripts').insert([{
@@ -88,6 +160,23 @@ export default function HearingMode({ onExit }: { onExit: () => void }) {
                             <button onClick={toggleListening} className={`btn ${isListening ? 'bg-red-500' : 'bg-teal-600'} text-white border-none`}>{isListening ? 'Stop' : 'Start'}</button>
                         </div>
                         <div className="p-4 bg-black/40 rounded h-64 overflow-y-auto font-mono text-sm text-slate-300">{transcript || "Waiting for audio..."}</div>
+                    </div>
+
+                    {/* NOTES SECTION WITH AUTOSAVE */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-semibold">Quick Notes</h2>
+                            <span className="text-xs text-slate-400 flex items-center gap-2">
+                                {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+                                {saving ? 'Saving...' : notes.trim() ? 'Saved' : 'Type to auto-save'}
+                            </span>
+                        </div>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Take notes during the hearing... (auto-saves every 2 seconds)"
+                            className="w-full h-40 bg-black/20 rounded p-4 text-slate-300 resize-none focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                        />
                     </div>
                 </div>
 
