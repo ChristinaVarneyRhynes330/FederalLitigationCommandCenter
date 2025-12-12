@@ -1,28 +1,30 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase'; // Connected to your database
-import { Clock, TrendingUp, AlertCircle, Calendar, FileText, ChevronRight, Target, Zap, CheckCircle, Shield, Gavel, Scale } from 'lucide-react';
+import { supabase } from '../utils/supabase';
+import { Clock, TrendingUp, AlertCircle, Calendar, FileText, ChevronRight, Target, Zap, Shield, Gavel, Loader2 } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { ProgressRing } from './ProgressRing';
 
-export default function Dashboard() {
-    // 1. State for Real Data
+// 1. Define Props to receive Navigation capability
+interface DashboardProps {
+    onNavigate: (page: string) => void;
+}
+
+export default function Dashboard({ onNavigate }: DashboardProps) {
     const [loading, setLoading] = useState(true);
+
+    // Real Data State
     const [stats, setStats] = useState({
         activeCases: 0,
         evidenceCount: 0,
-        recentCaseTitle: "Loading Case...",
-        documentsCount: 0
+        documentsCount: 0,
+        recentCaseTitle: "Loading...",
+        caseNumber: "Loading..."
     });
 
-    // 2. State for Timer (Your existing logic)
-    const [timeRemaining, setTimeRemaining] = useState({
-        days: 14,
-        hours: 8,
-        minutes: 32,
-        seconds: 45
-    });
+    const [deadlines, setDeadlines] = useState<any[]>([]);
+    const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
-    // 3. Fetch Real Data from Supabase
+    // 2. Data Fetching Effect
     useEffect(() => {
         async function fetchData() {
             try {
@@ -30,212 +32,123 @@ export default function Dashboard() {
                 const { data: { user } } = await supabase.auth.getUser();
 
                 if (user) {
-                    // A. Count Active Cases
-                    const { count: caseCount, data: recentCases } = await supabase
+                    // A. Fetch Counts from Tables
+                    const cases = await supabase.from('cases').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
+                    const evidence = await supabase.from('evidence').select('*', { count: 'exact', head: true }).eq('uploaded_by', user.id);
+                    const docs = await supabase.from('documents').select('*', { count: 'exact', head: true });
+
+                    // B. Fetch Most Recent Case to display in Header
+                    const recentCaseReq = await supabase
                         .from('cases')
-                        .select('*', { count: 'exact' })
+                        .select('title, case_number')
                         .eq('user_id', user.id)
                         .order('created_at', { ascending: false })
-                        .limit(1);
+                        .limit(1)
+                        .single();
 
-                    // B. Count Evidence Items
-                    const { count: evidenceCount } = await supabase
+                    // C. Fetch Upcoming Deadlines
+                    const deadlinesReq = await supabase
+                        .from('discovery_items')
+                        .select('*')
+                        .eq('user_id', user.id)
+                        .eq('status', 'pending')
+                        .order('due_date', { ascending: true })
+                        .limit(3);
+
+                    // D. Fetch Recent Evidence Activity
+                    const activityReq = await supabase
                         .from('evidence')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('uploaded_by', user.id);
+                        .select('*')
+                        .eq('uploaded_by', user.id)
+                        .order('created_at', { ascending: false })
+                        .limit(4);
 
-                    // C. Count Documents
-                    const { count: docCount } = await supabase
-                        .from('documents')
-                        .select('*', { count: 'exact', head: true });
-
+                    // E. Update State
                     setStats({
-                        activeCases: caseCount || 0,
-                        evidenceCount: evidenceCount || 0,
-                        recentCaseTitle: recentCases && recentCases.length > 0 ? recentCases[0].title : "No Active Cases",
-                        documentsCount: docCount || 0
+                        activeCases: cases.count || 0,
+                        evidenceCount: evidence.count || 0,
+                        documentsCount: docs.count || 0,
+                        // If no case found, show default message
+                        recentCaseTitle: recentCaseReq.data?.title || "No Active Cases",
+                        caseNumber: recentCaseReq.data?.case_number || "---"
                     });
+
+                    setDeadlines(deadlinesReq.data || []);
+                    setRecentActivity(activityReq.data || []);
                 }
             } catch (error) {
-                console.error('Error fetching dashboard data:', error);
+                console.error("Dashboard fetch error:", error);
             } finally {
                 setLoading(false);
             }
         }
-
         fetchData();
     }, []);
 
-    // Timer Effect
+    const [timeRemaining, setTimeRemaining] = useState({ days: 14, hours: 8, minutes: 32, seconds: 45 });
     useEffect(() => {
         const timer = setInterval(() => {
             setTimeRemaining(prev => {
-                if (prev.seconds > 0) {
-                    return { ...prev, seconds: prev.seconds - 1 };
-                } else if (prev.minutes > 0) {
-                    return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-                }
+                if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
+                if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
                 return prev;
             });
         }, 1000);
-
         return () => clearInterval(timer);
     }, []);
 
-    const caseReadiness = 68; // You can calculate this later based on tasks completed
-
-    // Static placeholders for now - you can connect these to a 'tasks' table later
-    const upcomingDeadlines = [
-        { id: 1, task: 'Expert Witness Disclosure', date: 'Dec 23, 2025', days: 14, status: 'urgent', priority: 'high' },
-        { id: 2, task: 'Summary Judgment Motion', date: 'Jan 05, 2026', days: 27, status: 'in-progress', priority: 'medium' },
-        { id: 3, task: 'Pretrial Conference', date: 'Jan 15, 2026', days: 37, status: 'scheduled', priority: 'medium' },
-    ];
-
-    const recentActivity = [
-        { id: 1, action: 'Exhibit A-127 uploaded to Evidence Vault', time: '2h ago', type: 'upload', icon: FileText },
-        { id: 2, action: 'AI case analysis completed', time: '5h ago', type: 'system', icon: Zap },
-        { id: 3, action: 'Rule 3.01(g) conference logged', time: '1d ago', type: 'conference', icon: Calendar },
-        { id: 4, action: 'Deposition transcript indexed', time: '2d ago', type: 'indexing', icon: FileText },
-    ];
+    const caseReadiness = stats.activeCases > 0 ? 68 : 0;
 
     return (
-        <div style={{
-            minHeight: '100vh',
-            background: 'linear-gradient(180deg, #0a0d1a 0%, #0f1117 50%, #1a1d29 100%)',
-        }}>
-            <div className="max-w-[1600px] mx-auto p-8 space-y-8">
+        <div className="min-h-screen bg-slate-900 p-8 text-white">
+            <div className="max-w-[1600px] mx-auto space-y-8">
 
                 {/* Command Header */}
-                <div style={{
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px solid rgba(159, 81, 102, 0.2)',
-                    borderRadius: '16px',
-                    padding: '32px 40px',
-                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 1px rgba(159, 81, 102, 0.5)',
-                    backdropFilter: 'blur(10px)'
-                }}>
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-md shadow-2xl">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
                         <div className="lg:col-span-2">
                             <div className="flex items-center gap-3 mb-4">
-                                <div style={{
-                                    width: '6px',
-                                    height: '6px',
-                                    borderRadius: '50%',
-                                    background: '#24bca3',
-                                    boxShadow: '0 0 12px rgba(36, 188, 163, 0.8)'
-                                }} />
-                                <span style={{
-                                    fontSize: '11px',
-                                    fontWeight: '600',
-                                    letterSpacing: '0.1em',
-                                    color: '#24bca3',
-                                    textTransform: 'uppercase'
-                                }}>ACTIVE LITIGATION</span>
+                                <div className="w-2 h-2 rounded-full bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.8)]" />
+                                <span className="text-teal-500 text-xs font-bold tracking-widest uppercase">Active Litigation</span>
                             </div>
 
-                            {/* REAL DATA: Case Title */}
-                            <h1 style={{
-                                fontSize: '32px',
-                                fontWeight: '700',
-                                color: '#ffffff',
-                                marginBottom: '8px',
-                                letterSpacing: '-0.02em'
-                            }}>{loading ? "Loading..." : stats.recentCaseTitle}</h1>
+                            {/* Dynamic Title */}
+                            <h1 className="text-4xl font-bold mb-2 text-white">
+                                {loading ? "Loading..." : stats.recentCaseTitle}
+                            </h1>
+                            <p className="text-slate-400 mb-6 font-mono text-sm">
+                                Case No. {stats.caseNumber} • U.S. District Court
+                            </p>
 
-                            <p style={{
-                                fontSize: '14px',
-                                color: 'rgba(255, 255, 255, 0.5)',
-                                marginBottom: '24px'
-                            }}>Civil Rights Violation • Case No. 2025-CV-1847 • U.S. District Court</p>
-
-                            <div className="flex gap-8">
+                            <div className="flex gap-12">
                                 <div>
-                                    <div style={{
-                                        fontSize: '42px',
-                                        fontWeight: '700',
-                                        color: '#9F5166',
-                                        lineHeight: '1',
-                                        marginBottom: '8px'
-                                    }}>{stats.activeCases}</div>
-                                    <div style={{
-                                        fontSize: '11px',
-                                        color: 'rgba(255, 255, 255, 0.4)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.1em',
-                                        fontWeight: '600'
-                                    }}>Active Cases</div>
+                                    <div className="text-4xl font-bold text-rose-500 mb-1">{stats.activeCases}</div>
+                                    <div className="text-xs text-slate-400 uppercase tracking-widest font-bold">Cases</div>
                                 </div>
                                 <div>
-                                    <div style={{
-                                        fontSize: '42px',
-                                        fontWeight: '700',
-                                        color: '#24bca3',
-                                        lineHeight: '1',
-                                        marginBottom: '8px'
-                                    }}>{caseReadiness}%</div>
-                                    <div style={{
-                                        fontSize: '11px',
-                                        color: 'rgba(255, 255, 255, 0.4)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.1em',
-                                        fontWeight: '600'
-                                    }}>Case Ready</div>
+                                    <div className="text-4xl font-bold text-teal-500 mb-1">{stats.evidenceCount}</div>
+                                    <div className="text-xs text-slate-400 uppercase tracking-widest font-bold">Evidence Items</div>
                                 </div>
                                 <div>
-                                    {/* REAL DATA: Evidence Count */}
-                                    <div style={{
-                                        fontSize: '42px',
-                                        fontWeight: '700',
-                                        color: '#ffffff',
-                                        lineHeight: '1',
-                                        marginBottom: '8px'
-                                    }}>{stats.evidenceCount}</div>
-                                    <div style={{
-                                        fontSize: '11px',
-                                        color: 'rgba(255, 255, 255, 0.4)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.1em',
-                                        fontWeight: '600'
-                                    }}>Evidence Items</div>
+                                    <div className="text-4xl font-bold text-blue-500 mb-1">{stats.documentsCount}</div>
+                                    <div className="text-xs text-slate-400 uppercase tracking-widest font-bold">Documents</div>
                                 </div>
                             </div>
                         </div>
 
                         <div className="flex flex-col gap-3">
-                            <button style={{
-                                background: 'linear-gradient(135deg, #9F5166 0%, #8b4758 100%)',
-                                color: 'white',
-                                padding: '14px 24px',
-                                borderRadius: '10px',
-                                border: 'none',
-                                fontSize: '14px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                boxShadow: '0 4px 16px rgba(159, 81, 102, 0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
-                                transition: 'all 0.2s ease',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px'
-                            }}>
+                            {/* WORKING BUTTONS using onNavigate */}
+                            <button
+                                onClick={() => onNavigate('hearing')}
+                                className="btn bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 border-none text-white flex items-center justify-center gap-2 py-4 rounded-xl shadow-lg shadow-rose-900/20 transition-all transform hover:scale-105"
+                            >
                                 <Target className="w-5 h-5" />
                                 Enter Hearing Mode
                             </button>
-                            <button style={{
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                color: 'rgba(255, 255, 255, 0.9)',
-                                padding: '14px 24px',
-                                borderRadius: '10px',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                fontSize: '14px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px'
-                            }}>
+                            <button
+                                onClick={() => alert("Quick actions coming in v2!")}
+                                className="btn bg-white/5 hover:bg-white/10 border border-white/10 text-white flex items-center justify-center gap-2 py-3 rounded-xl transition-all"
+                            >
                                 <Zap className="w-5 h-5" />
                                 Quick Actions
                             </button>
@@ -243,261 +156,101 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* KPI Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Card 1: Evidence */}
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(159, 81, 102, 0.2)',
-                        borderRadius: '12px',
-                        padding: '24px',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
-                    }}>
-                        <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '3px',
-                            background: 'linear-gradient(90deg, #9F5166 0%, transparent 100%)'
-                        }} />
-                        <div className="flex items-start justify-between mb-4">
-                            <div>
-                                <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '600' }}>Evidence Items</p>
-                                <p style={{ fontSize: '36px', fontWeight: '700', color: '#ffffff', lineHeight: '1' }}>{stats.evidenceCount}</p>
-                            </div>
-                            <div style={{
-                                width: '48px',
-                                height: '48px',
-                                borderRadius: '12px',
-                                background: 'rgba(159, 81, 102, 0.1)',
-                                border: '1px solid rgba(159, 81, 102, 0.2)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
-                                <Shield className="w-6 h-6" style={{ color: '#9F5166' }} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Card 2: Documents */}
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(36, 188, 163, 0.2)',
-                        borderRadius: '12px',
-                        padding: '24px',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
-                    }}>
-                        <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '3px',
-                            background: 'linear-gradient(90deg, #24bca3 0%, transparent 100%)'
-                        }} />
-                        <div className="flex items-start justify-between mb-4">
-                            <div>
-                                <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '600' }}>Documents</p>
-                                <p style={{ fontSize: '36px', fontWeight: '700', color: '#ffffff', lineHeight: '1' }}>{stats.documentsCount}</p>
-                            </div>
-                            <div style={{
-                                width: '48px',
-                                height: '48px',
-                                borderRadius: '12px',
-                                background: 'rgba(36, 188, 163, 0.1)',
-                                border: '1px solid rgba(36, 188, 163, 0.2)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
-                                <FileText className="w-6 h-6" style={{ color: '#24bca3' }} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Card 3: Active Cases */}
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(46, 56, 107, 0.3)',
-                        borderRadius: '12px',
-                        padding: '24px',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
-                    }}>
-                        <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '3px',
-                            background: 'linear-gradient(90deg, #2e386b 0%, transparent 100%)'
-                        }} />
-                        <div className="flex items-start justify-between mb-4">
-                            <div>
-                                <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '600' }}>Active Cases</p>
-                                <p style={{ fontSize: '36px', fontWeight: '700', color: '#ffffff', lineHeight: '1' }}>{stats.activeCases}</p>
-                            </div>
-                            <div style={{
-                                width: '48px',
-                                height: '48px',
-                                borderRadius: '12px',
-                                background: 'rgba(46, 56, 107, 0.2)',
-                                border: '1px solid rgba(46, 56, 107, 0.3)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
-                                <Gavel className="w-6 h-6" style={{ color: '#6b7ba8' }} />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ... Rest of the UI (Docket Clock, Upcoming Deadlines, etc.) remains the same ... */}
-                {/* I've kept the lower section structure identical to what you provided to preserve the layout */}
+                {/* Main Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2 space-y-8">
                         {/* Docket Clock */}
-                        <div style={{
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            border: '1px solid rgba(159, 81, 102, 0.2)',
-                            borderLeft: '4px solid #9F5166',
-                            borderRadius: '12px',
-                            overflow: 'hidden',
-                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
-                        }}>
-                            <div style={{
-                                padding: '24px 32px',
-                                borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
-                            }}>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div style={{
-                                            width: '44px',
-                                            height: '44px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(159, 81, 102, 0.15)',
-                                            border: '1px solid rgba(159, 81, 102, 0.3)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}>
-                                            <Clock className="w-5 h-5" style={{ color: '#9F5166' }} />
-                                        </div>
-                                        <div>
-                                            <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#ffffff', marginBottom: '2px' }}>Docket Clock</h2>
-                                            <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.5)' }}>Next deadline: Expert Witness Disclosure</p>
-                                        </div>
-                                    </div>
+                        <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg">
+                            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-rose-500/20 rounded-lg"><Clock className="w-5 h-5 text-rose-500" /></div>
+                                    <h2 className="font-semibold text-white">Docket Clock</h2>
                                 </div>
+                                <button
+                                    onClick={() => onNavigate('logistics')}
+                                    className="text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider flex items-center gap-2 transition-colors"
+                                >
+                                    View Calendar <ChevronRight className="w-3 h-3" />
+                                </button>
                             </div>
-                            <div style={{ padding: '40px 32px' }}>
-                                <div className="grid grid-cols-4 gap-6">
-                                    {[
-                                        { value: timeRemaining.days, label: 'Days' },
-                                        { value: timeRemaining.hours, label: 'Hours' },
-                                        { value: timeRemaining.minutes, label: 'Minutes' },
-                                        { value: timeRemaining.seconds, label: 'Seconds' }
-                                    ].map((item, i) => (
-                                        <div key={i} style={{ textAlign: 'center' }}>
-                                            <div style={{
-                                                fontSize: '56px',
-                                                fontWeight: '700',
-                                                color: '#ffffff',
-                                                lineHeight: '1',
-                                                marginBottom: '12px',
-                                                fontVariantNumeric: 'tabular-nums'
-                                            }}>{String(item.value).padStart(2, '0')}</div>
-                                            <div style={{
-                                                fontSize: '11px',
-                                                color: 'rgba(255, 255, 255, 0.4)',
-                                                textTransform: 'uppercase',
-                                                letterSpacing: '0.1em',
-                                                fontWeight: '600'
-                                            }}>{item.label}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Upcoming Deadlines */}
-                        <div style={{
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            borderRadius: '12px',
-                            overflow: 'hidden',
-                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
-                        }}>
-                            <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#ffffff' }}>Upcoming Deadlines</h3>
-                            </div>
-                            <div>
-                                {upcomingDeadlines.map((deadline, i) => (
-                                    <div key={deadline.id} style={{
-                                        padding: '20px 32px',
-                                        borderBottom: i < upcomingDeadlines.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                                    }}>
-                                        <span style={{color: 'white'}}>{deadline.task}</span>
-                                        <span style={{color: 'rgba(255,255,255,0.5)', fontSize: '13px'}}>{deadline.date}</span>
+                            <div className="p-8 grid grid-cols-4 gap-4 text-center">
+                                {[
+                                    { val: timeRemaining.days, label: 'Days' },
+                                    { val: timeRemaining.hours, label: 'Hours' },
+                                    { val: timeRemaining.minutes, label: 'Mins' },
+                                    { val: timeRemaining.seconds, label: 'Secs' }
+                                ].map((t, i) => (
+                                    <div key={i} className="bg-black/20 rounded-lg p-4 backdrop-blur-sm">
+                                        <div className="text-4xl font-bold font-mono text-white mb-1">{String(t.val).padStart(2,'0')}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">{t.label}</div>
                                     </div>
                                 ))}
                             </div>
                         </div>
+
+                        {/* Upcoming Deadlines (Real Data) */}
+                        <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg">
+                            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                                <h3 className="font-semibold text-white">Upcoming Deadlines</h3>
+                                <button onClick={() => onNavigate('logistics')} className="text-xs text-slate-400 hover:text-white">View All</button>
+                            </div>
+                            <div className="divide-y divide-white/5">
+                                {loading ? (
+                                    <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-teal-500"/></div>
+                                ) : deadlines.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-500 italic">No pending deadlines found. Add items in Logistics.</div>
+                                ) : (
+                                    deadlines.map((item) => (
+                                        <div key={item.id} className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors group">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-2 h-2 rounded-full ${item.status === 'urgent' ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'bg-amber-500'}`} />
+                                                <div>
+                                                    <div className="font-medium text-slate-200 group-hover:text-white transition-colors">{item.description}</div>
+                                                    <div className="text-xs text-slate-500 mt-1">{item.type} • Due: {new Date(item.due_date).toLocaleDateString()}</div>
+                                                </div>
+                                            </div>
+                                            <span className="px-3 py-1 bg-white/5 rounded-full text-xs font-medium text-slate-300 border border-white/10">
+                        {item.status || 'Pending'}
+                      </span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Right Column: Case Readiness & Recent Activity */}
+                    {/* Right Column */}
                     <div className="space-y-8">
-                        <div style={{
-                            background: 'linear-gradient(135deg, rgba(36, 188, 163, 0.15) 0%, rgba(64, 143, 134, 0.1) 100%)',
-                            border: '1px solid rgba(36, 188, 163, 0.3)',
-                            borderRadius: '12px',
-                            padding: '28px',
-                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
-                        }}>
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#ffffff', marginBottom: '4px' }}>Case Readiness</h3>
-                                    <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)' }}>Overall preparation status</p>
-                                </div>
+                        <div className="bg-gradient-to-br from-teal-900/40 to-teal-900/10 border border-teal-500/20 rounded-xl p-6 shadow-lg">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="font-semibold text-white">Case Readiness</h3>
+                                <Tooltip text="Calculated based on completed discovery items and evidence gathered.">
+                                    <AlertCircle className="w-5 h-5 text-teal-400 cursor-help" />
+                                </Tooltip>
                             </div>
-                            <div className="flex justify-center mb-8">
-                                <ProgressRing
-                                    progress={caseReadiness}
-                                    size={140}
-                                    strokeWidth={10}
-                                    color="#24bca3"
-                                    backgroundColor="rgba(255, 255, 255, 0.1)"
-                                />
+                            <div className="flex justify-center mb-6">
+                                <ProgressRing progress={caseReadiness} size={160} strokeWidth={12} color="#2dd4bf" backgroundColor="rgba(255,255,255,0.05)" />
                             </div>
                         </div>
 
-                        <div style={{
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            borderRadius: '12px',
-                            overflow: 'hidden',
-                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
-                        }}>
-                            <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#ffffff' }}>Recent Activity</h3>
+                        {/* Recent Activity (Real Data) */}
+                        <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg">
+                            <div className="p-6 border-b border-white/10">
+                                <h3 className="font-semibold text-white">Recent Evidence Uploads</h3>
                             </div>
-                            <div>
-                                {recentActivity.map((activity, i) => (
-                                    <div key={activity.id} style={{
-                                        padding: '16px 24px',
-                                        borderBottom: i < recentActivity.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
-                                    }}>
-                                        <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.9)', marginBottom: '4px' }}>{activity.action}</p>
-                                        <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.4)' }}>{activity.time}</p>
+                            <div className="divide-y divide-white/5">
+                                {recentActivity.length === 0 && !loading && (
+                                    <div className="p-8 text-center text-slate-500 italic">No recent activity recorded.</div>
+                                )}
+                                {recentActivity.map((item) => (
+                                    <div key={item.id} className="p-4 flex gap-4 hover:bg-white/5 transition-colors">
+                                        <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center flex-shrink-0">
+                                            <FileText className="w-5 h-5 text-teal-400" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-sm text-slate-200 truncate">{item.title}</div>
+                                            <div className="text-xs text-slate-500 mt-0.5">Uploaded {new Date(item.created_at).toLocaleDateString()}</div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
